@@ -1,0 +1,17 @@
+MP_Data/
+dataset/raw_videos/
+dataset/processed_landmarks/
+
+__pycache__/
+*.py[cod]
+.venv/
+env/
+venv/
+
+*.pth
+*.pt
+*.h5
+
+.DS_Store
+.vscode/
+.idea/
