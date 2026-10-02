@@ -1,0 +1,12 @@
+{
+    "actions": [
+        "hello",
+        "thanks",
+        "please",
+        "yes",
+        "no",
+        "help",
+        "eat",
+        "finish"
+    ]
+}
