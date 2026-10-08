@@ -1,8 +1,10 @@
-fastapi>=0.110.0
-uvicorn[standard]>=0.28.0
-python-multipart>=0.0.9
-torch
+fastapi
+uvicorn[standard]
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
 numpy
 opencv-python
-mediapipe==0.10.14
-protobuf==4.25.9
+torch
+mediapipe
+pydantic

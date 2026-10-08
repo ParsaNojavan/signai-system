@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SignAI - تست زنده زبان اشاره</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              DEFAULT: "#10b981",
+              hover: "#059669",
+            },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+    #videoElement {
+      transform: scaleX(-1);
+    }
+  </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col items-center justify-center p-4">
+  <div class="w-full max-w-3xl bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-6">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between border-b border-zinc-800 pb-4">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+          <span>SignAI System</span>
+          <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800">Live Client</span>
+        </h1>
+        <p class="text-sm text-zinc-400 mt-1">تست Real-time مدل Bi-LSTM از طریق WebSocket</p>
+      </div>
+
+      <div id="statusBadge" class="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-400 border border-zinc-700 transition-colors">
+        <span id="statusDot" class="w-2.5 h-2.5 rounded-full bg-zinc-500"></span>
+        <span id="statusText">قطع ارتباط</span>
+      </div>
+    </div>
+
+    <!-- Server config -->
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="space-y-2">
+        <label class="block text-sm text-zinc-300">آدرس WebSocket</label>
+        <input
+          id="wsUrlInput"
+          type="text"
+          value="ws://localhost:8000/ws/inference"
+          class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 outline-none focus:border-emerald-500"
+        />
+      </div>
+
+      <div class="space-y-2">
+        <label class="block text-sm text-zinc-300">JWT Token</label>
+        <input
+          id="tokenInput"
+          type="text"
+          placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+          class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 outline-none focus:border-emerald-500 ltr"
+        />
+      </div>
+    </div>
+
+    <!-- Health check -->
+    <div class="flex flex-wrap gap-3">
+      <button
+        id="healthBtn"
+        onclick="checkHealth()"
+        class="bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-medium py-2.5 px-4 rounded-xl border border-zinc-700 transition"
+      >
+        بررسی Health
+      </button>
+
+      <div id="healthResult" class="text-sm text-zinc-400 flex items-center">
+        هنوز بررسی نشده
+      </div>
+    </div>
+
+    <!-- Video -->
+    <div class="relative w-full aspect-video bg-zinc-950 rounded-xl overflow-hidden border border-zinc-800 flex items-center justify-center">
+      <video id="videoElement" autoplay playsinline class="w-full h-full object-cover hidden"></video>
+      <div id="videoPlaceholder" class="text-zinc-600 text-sm flex flex-col items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-zinc-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+        دوربین متوقف است
+      </div>
+
+      <div class="absolute top-3 left-3 flex gap-2">
+        <div class="bg-zinc-900/80 backdrop-blur border border-zinc-800/80 text-[11px] font-mono text-zinc-300 px-2 py-1 rounded">
+          FPS: <span id="fpsCount">0</span>
+        </div>
+        <div id="modeBadge" class="hidden bg-zinc-900/80 backdrop-blur border border-zinc-800/80 text-[11px] font-mono text-zinc-400 px-2 py-1 rounded">
+          hand: <span id="handModeText" class="text-emerald-400">---</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Result panels -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="bg-zinc-950/70 border border-zinc-800/80 rounded-xl p-4">
+        <div class="text-xs text-zinc-400 font-medium">کلمه تشخیص داده‌شده</div>
+        <div id="actionLabel" class="text-2xl font-black text-zinc-500 mt-2 truncate">---</div>
+      </div>
+
+      <div class="bg-zinc-950/70 border border-zinc-800/80 rounded-xl p-4">
+        <div class="text-xs text-zinc-400 font-medium flex justify-between">
+          <span>درصد اطمینان</span>
+          <span id="confText" class="font-mono text-zinc-300">0%</span>
+        </div>
+        <div class="w-full bg-zinc-800 rounded-full h-2.5 mt-3 overflow-hidden">
+          <div id="confBar" class="bg-zinc-600 h-2.5 rounded-full transition-all duration-150" style="width: 0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Raw response -->
+    <div class="bg-zinc-950/70 border border-zinc-800/80 rounded-xl p-4">
+      <div class="text-xs text-zinc-400 font-medium mb-2">آخرین پاسخ خام سرور</div>
+      <pre id="rawOutput" class="text-xs text-zinc-300 whitespace-pre-wrap break-words">---</pre>
+    </div>
+
+    <!-- Controls -->
+    <div class="flex gap-3 pt-2">
+      <button
+        id="startBtn"
+        onclick="startStream()"
+        class="flex-1 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-medium py-2.5 rounded-xl transition duration-150 shadow-lg shadow-emerald-950/50"
+      >
+        شروع دوربین و استریم
+      </button>
+      <button
+        id="stopBtn"
+        onclick="stopStream()"
+        disabled
+        class="flex-1 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-400 disabled:opacity-40 disabled:cursor-not-allowed font-medium py-2.5 rounded-xl transition duration-150 border border-zinc-700"
+      >
+        توقف
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const TARGET_FPS = 30;
+
+    let ws = null;
+    let stream = null;
+    let sendInterval = null;
+    let lastTime = performance.now();
+    let frameCount = 0;
+    let isProcessing = false;
+
+    const video = document.getElementById("videoElement");
+    const placeholder = document.getElementById("videoPlaceholder");
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const statusBadge = document.getElementById("statusBadge");
+    const statusDot = document.getElementById("statusDot");
+    const statusText = document.getElementById("statusText");
+    const actionLabel = document.getElementById("actionLabel");
+    const confText = document.getElementById("confText");
+    const confBar = document.getElementById("confBar");
+    const fpsCount = document.getElementById("fpsCount");
+    const modeBadge = document.getElementById("modeBadge");
+    const handModeText = document.getElementById("handModeText");
+    const wsUrlInput = document.getElementById("wsUrlInput");
+    const tokenInput = document.getElementById("tokenInput");
+    const rawOutput = document.getElementById("rawOutput");
+    const healthResult = document.getElementById("healthResult");
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    function setStatus(connected, text) {
+      statusText.innerText = text;
+      if (connected) {
+        statusBadge.className =
+          "flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg bg-emerald-950/80 text-emerald-400 border border-emerald-800";
+        statusDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse";
+      } else {
+        statusBadge.className =
+          "flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-400 border border-zinc-700";
+        statusDot.className = "w-2.5 h-2.5 rounded-full bg-zinc-500";
+      }
+    }
+
+    function resetUI() {
+      actionLabel.innerText = "---";
+      actionLabel.className = "text-2xl font-black text-zinc-500 mt-2 truncate";
+      confText.innerText = "0%";
+      confBar.style.width = "0%";
+      confBar.className = "bg-zinc-600 h-2.5 rounded-full transition-all duration-150";
+      handModeText.innerText = "---";
+      fpsCount.innerText = "0";
+      rawOutput.innerText = "---";
+      isProcessing = false;
+    }
+
+    async function checkHealth() {
+      try {
+        const baseHttp = wsUrlInput.value
+          .replace(/^ws:\/\//, "http://")
+          .replace(/^wss:\/\//, "https://")
+          .replace(/\/ws\/inference.*$/, "");
+
+        const res = await fetch(`${baseHttp}/health`);
+        const data = await res.json();
+
+        healthResult.innerText = `OK | device=${data.device} | seq=${data.sequence_length} | input=${data.input_size}`;
+      } catch (err) {
+        healthResult.innerText = `Health failed: ${err.message}`;
+      }
+    }
+
+    async function startStream() {
+      try {
+        const baseWsUrl = wsUrlInput.value.trim();
+        const token = tokenInput.value.trim();
+
+        if (!baseWsUrl) {
+          alert("آدرس WebSocket را وارد کن.");
+          return;
+        }
+
+        if (!token) {
+          alert("JWT Token را وارد کن.");
+          return;
+        }
+
+        const wsUrl = `${baseWsUrl}?token=${encodeURIComponent(token)}`;
+
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 30 }
+          },
+          audio: false
+        });
+
+        video.srcObject = stream;
+        video.classList.remove("hidden");
+        placeholder.classList.add("hidden");
+        modeBadge.classList.remove("hidden");
+
+        ws = new WebSocket(wsUrl);
+        ws.binaryType = "blob";
+
+        ws.onopen = () => {
+          setStatus(true, "متصل به سرور");
+          startBtn.disabled = true;
+          stopBtn.disabled = false;
+          startSendingFrames();
+        };
+
+        ws.onmessage = (event) => {
+          isProcessing = false;
+
+          let res;
+          try {
+            res = JSON.parse(event.data);
+          } catch {
+            rawOutput.innerText = String(event.data);
+            return;
+          }
+
+          rawOutput.innerText = JSON.stringify(res, null, 2);
+
+          if (res.hand_mode) {
+            if (res.hand_mode === "mirrored") {
+              handModeText.innerText = "mirrored";
+            } else if (res.hand_mode === "original") {
+              handModeText.innerText = "original";
+            } else {
+              handModeText.innerText = res.hand_mode;
+            }
+          } else {
+            handModeText.innerText = "---";
+          }
+
+          if (res.action === "idle") {
+            actionLabel.innerText = "در انتظار حرکت";
+            actionLabel.className = "text-xl font-bold text-zinc-500 mt-2 truncate";
+            confText.innerText = "0%";
+            confBar.style.width = "0%";
+            confBar.className = "bg-zinc-600 h-2.5 rounded-full transition-all duration-150";
+            return;
+          }
+
+          const percent = Math.round((res.confidence || 0) * 100);
+
+          if (res.action === "uncertain") {
+            actionLabel.innerText = "نامطمئن";
+            actionLabel.className = "text-xl font-bold text-amber-500 mt-2 truncate";
+            confText.innerText = percent + "%";
+            confBar.style.width = percent + "%";
+            confBar.className = "bg-amber-500 h-2.5 rounded-full transition-all duration-150";
+            return;
+          }
+
+          if (res.action) {
+            actionLabel.innerText = String(res.action).toUpperCase();
+            actionLabel.className = "text-2xl font-black text-emerald-400 mt-2 truncate";
+            confText.innerText = percent + "%";
+            confBar.style.width = percent + "%";
+            confBar.className = "bg-emerald-500 h-2.5 rounded-full transition-all duration-150";
+          }
+        };
+
+        ws.onclose = (event) => {
+          console.warn("WebSocket closed:", event.code, event.reason);
+          setStatus(false, `قطع ارتباط (${event.code})`);
+          stopStream(false);
+        };
+
+        ws.onerror = (err) => {
+          console.error("WebSocket Error:", err);
+          setStatus(false, "خطا در اتصال");
+        };
+      } catch (err) {
+        stopStream(false);
+        alert("دسترسی به دوربین یا اتصال به وب‌سوکت ناموفق بود:\n" + err.message);
+      }
+    }
+
+    function startSendingFrames() {
+      canvas.width = 640;
+      canvas.height = 480;
+
+      sendInterval = setInterval(() => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        if (isProcessing) return;
+        if (!video.videoWidth || !video.videoHeight) return;
+
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob((blob) => {
+          if (blob && ws && ws.readyState === WebSocket.OPEN) {
+            isProcessing = true;
+            ws.send(blob);
+            frameCount++;
+          }
+        }, "image/jpeg", 0.7);
+
+        const now = performance.now();
+        if (now - lastTime >= 1000) {
+          fpsCount.innerText = String(frameCount);
+          frameCount = 0;
+          lastTime = now;
+        }
+      }, 1000 / TARGET_FPS);
+    }
+
+    function stopStream(closeSocket = true) {
+      if (sendInterval) {
+        clearInterval(sendInterval);
+        sendInterval = null;
+      }
+
+      if (closeSocket && ws) {
+        try {
+          ws.close();
+        } catch (_) {}
+      }
+
+      ws = null;
+
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+        stream = null;
+      }
+
+      video.srcObject = null;
+      video.classList.add("hidden");
+      placeholder.classList.remove("hidden");
+      modeBadge.classList.add("hidden");
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      setStatus(false, "قطع ارتباط");
+      resetUI();
+    }
+  </script>
+</body>
+</html>
