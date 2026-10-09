@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from server.config import settings
+from server.database import Base, engine
 from server.routes.auth import router as auth_router
 from server.routes.health import router as health_router
 from server.routes.inference import router as inference_router
@@ -19,7 +20,10 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+
     app.state.predictor = SignPredictor()
+    
     yield
 
 

@@ -1,3 +1,4 @@
+import asyncio
 import collections
 import logging
 
@@ -70,7 +71,7 @@ async def websocket_inference(websocket: WebSocket):
 
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 rgb.flags.writeable = False
-                results = holistic.process(rgb)
+                results = await asyncio.to_thread(holistic.process, rgb)
 
                 if not check_hand_activity(results):
                     sequence_buffer.clear()
@@ -92,7 +93,7 @@ async def websocket_inference(websocket: WebSocket):
                     continue
 
                 sequence = np.asarray(sequence_buffer, dtype=np.float32)
-                response = predictor.predict(sequence)
+                response = await asyncio.to_thread(predictor.predict, sequence)
                 await websocket.send_json(response)
 
     except WebSocketDisconnect:
