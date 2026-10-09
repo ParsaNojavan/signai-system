@@ -5,7 +5,7 @@ dataset/processed_landmarks/
 __pycache__/
 *.py[cod]
 .venv/
-env/
+*/.env/
 venv/
 
 *.pth

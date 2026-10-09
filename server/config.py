@@ -1,9 +1,11 @@
 import os
 from dataclasses import dataclass
 from pathlib import Path
-
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+load_dotenv(BASE_DIR / "server" / ".env")
 
 
 def get_env_bool(name: str, default: bool = False) -> bool:
@@ -23,6 +25,15 @@ def get_env_float(name: str, default: float) -> float:
     return float(value) if value is not None else default
 
 
+def get_env_required(name: str) -> str:
+    value = os.getenv(name)
+    if not value or not value.strip():
+        raise RuntimeError(
+            f"❌ متغیر محیطی حیاتی '{name}' تعریف نشده است! لطفاً آن را در فایل .env قرار دهید."
+        )
+    return value.strip()
+
+
 @dataclass(frozen=True)
 class Settings:
     # Paths
@@ -30,6 +41,9 @@ class Settings:
     model_path: Path
     actions_file: Path
     training_dir: Path
+
+    # Database
+    database_url: str
 
     # Inference
     sequence_length: int
@@ -58,7 +72,7 @@ def load_settings() -> Settings:
         "ALLOWED_ORIGINS",
         "*,http://localhost:3000,http://127.0.0.1:3000,"
         "http://localhost:5173,http://127.0.0.1:5173,"
-        "http://localhost:5500,http://127.0.0.1:5500"
+        "http://localhost:5500,http://127.0.0.1:5500",
     )
     allowed_origins = tuple(
         origin.strip()
@@ -76,6 +90,8 @@ def load_settings() -> Settings:
         ),
         training_dir=BASE_DIR / "training",
 
+        database_url=get_env_required("DATABASE_URL"),
+
         sequence_length=get_env_int("SEQUENCE_LENGTH", 30),
         input_size=get_env_int("INPUT_SIZE", 218),
         confidence_threshold=get_env_float("CONFIDENCE_THRESHOLD", 0.75),
@@ -88,7 +104,7 @@ def load_settings() -> Settings:
         access_token_expire_minutes=get_env_int("ACCESS_TOKEN_EXPIRE_MINUTES", 60),
 
         app_name=os.getenv("APP_NAME", "SignAI Server"),
-        app_version=os.getenv("APP_VERSION", "2.0.0"),
+        app_version=os.getenv("APP_VERSION", "1.0.0"),
         debug=get_env_bool("DEBUG", True),
 
         allowed_origins=allowed_origins,

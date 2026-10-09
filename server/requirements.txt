@@ -1,10 +1,12 @@
 fastapi
 uvicorn[standard]
-python-jose[cryptography]
-passlib[bcrypt]
+PyJWT>=2.8.0
+cryptography>=41.0.0
+bcrypt>=4.0.1
 python-multipart
 numpy
 opencv-python
 torch
 mediapipe
 pydantic
+SQLAlchemy>=2.0.0
