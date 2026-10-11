@@ -1,5 +1,6 @@
-import uuid
 from datetime import datetime, timezone
+from typing import Optional
+import uuid
 from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -15,11 +16,20 @@ class User(Base):
     username: Mapped[str] = mapped_column(
         String(64), unique=True, index=True, nullable=False
     )
+    email: Mapped[str] = mapped_column(
+        String(255), unique=True, index=True, nullable=False
+    )
     hashed_password: Mapped[str] = mapped_column(
         String(255), nullable=False
     )
     role: Mapped[str] = mapped_column(
         String(20), default="user", nullable=False
+    )
+    is_verified: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    verify_code: Mapped[Optional[str]] = mapped_column(
+        String(6), nullable=True
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False

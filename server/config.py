@@ -25,7 +25,7 @@ def get_env_float(name: str, default: float) -> float:
     return float(value) if value is not None else default
 
 
-def get_env_required(name: str) -> str:
+def require_env(name: str) -> str:
     value = os.getenv(name)
     if not value or not value.strip():
         raise RuntimeError(
@@ -66,6 +66,13 @@ class Settings:
     # CORS
     allowed_origins: tuple[str, ...]
 
+    # Email
+    smtp_host: str
+    smtp_port: int
+    smtp_user: str
+    smtp_password: str
+    smtp_from: str
+
 
 def load_settings() -> Settings:
     origins_raw = os.getenv(
@@ -80,6 +87,9 @@ def load_settings() -> Settings:
         if origin.strip()
     )
 
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_from = os.getenv("SMTP_FROM", smtp_user)
+
     return Settings(
         base_dir=BASE_DIR,
         model_path=Path(
@@ -90,7 +100,7 @@ def load_settings() -> Settings:
         ),
         training_dir=BASE_DIR / "training",
 
-        database_url=get_env_required("DATABASE_URL"),
+        database_url=require_env("DATABASE_URL"),
 
         sequence_length=get_env_int("SEQUENCE_LENGTH", 30),
         input_size=get_env_int("INPUT_SIZE", 218),
@@ -108,6 +118,12 @@ def load_settings() -> Settings:
         debug=get_env_bool("DEBUG", True),
 
         allowed_origins=allowed_origins,
+
+        smtp_host=os.getenv("SMTP_HOST", "smtp.gmail.com"),
+        smtp_port=get_env_int("SMTP_PORT", 465),
+        smtp_user=smtp_user,
+        smtp_password=os.getenv("SMTP_PASSWORD", ""),
+        smtp_from=smtp_from,
     )
 
 
