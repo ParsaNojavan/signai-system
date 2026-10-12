@@ -124,7 +124,13 @@ def verify_email(
 
     user_service.verify_user(user)
 
-    return {"message": "ایمیل با موفقیت تأیید شد."}
+    access_token = create_access_token(
+            subject=user.username,
+            role=user.role,
+        )
+    
+    return TokenResponse(access_token=access_token)
+
 
 
 @router.post("/login", response_model=TokenResponse)
