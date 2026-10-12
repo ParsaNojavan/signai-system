@@ -38,7 +38,7 @@
           <span>SignAI System</span>
           <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800">Live Client</span>
         </h1>
-        <p class="text-sm text-zinc-400 mt-1">تست Real-time مدل Bi-LSTM از طریق WebSocket</p>
+        <p class="text-sm text-zinc-400 mt-1">تشخیص Real-time کلمات و الفبای اشاره از طریق WebSocket</p>
       </div>
 
       <div id="statusBadge" class="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-400 border border-zinc-700 transition-colors">
@@ -47,16 +47,27 @@
       </div>
     </div>
 
-    <!-- Server config -->
-    <div class="grid md:grid-cols-2 gap-4">
+    <!-- Server config & Mode selection -->
+    <div class="grid md:grid-cols-3 gap-4">
       <div class="space-y-2">
         <label class="block text-sm text-zinc-300">آدرس WebSocket</label>
         <input
           id="wsUrlInput"
           type="text"
           value="ws://localhost:8000/ws/inference"
-          class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 outline-none focus:border-emerald-500"
+          class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 outline-none focus:border-emerald-500 font-mono"
         />
+      </div>
+
+      <div class="space-y-2">
+        <label class="block text-sm text-zinc-300">حالت تشخیص (Mode)</label>
+        <select
+          id="modeSelect"
+          class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 outline-none focus:border-emerald-500"
+        >
+          <option value="talking">کلمات پیوسته (Talking)</option>
+          <option value="spelling">هجی کردن و الفبا (Spelling)</option>
+        </select>
       </div>
 
       <div class="space-y-2">
@@ -65,13 +76,14 @@
           id="tokenInput"
           type="text"
           placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-          class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 outline-none focus:border-emerald-500 ltr"
+          class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 outline-none focus:border-emerald-500 font-mono"
+          dir="ltr"
         />
       </div>
     </div>
 
     <!-- Health check -->
-    <div class="flex flex-wrap gap-3">
+    <div class="flex flex-wrap gap-3 items-center">
       <button
         id="healthBtn"
         onclick="checkHealth()"
@@ -80,7 +92,7 @@
         بررسی Health
       </button>
 
-      <div id="healthResult" class="text-sm text-zinc-400 flex items-center">
+      <div id="healthResult" class="text-sm text-zinc-400 font-mono">
         هنوز بررسی نشده
       </div>
     </div>
@@ -99,6 +111,9 @@
         <div class="bg-zinc-900/80 backdrop-blur border border-zinc-800/80 text-[11px] font-mono text-zinc-300 px-2 py-1 rounded">
           FPS: <span id="fpsCount">0</span>
         </div>
+        <div id="activeModeBadge" class="hidden bg-zinc-900/80 backdrop-blur border border-zinc-800/80 text-[11px] font-mono text-amber-400 px-2 py-1 rounded">
+          mode: <span id="activeModeText">talking</span>
+        </div>
         <div id="modeBadge" class="hidden bg-zinc-900/80 backdrop-blur border border-zinc-800/80 text-[11px] font-mono text-zinc-400 px-2 py-1 rounded">
           hand: <span id="handModeText" class="text-emerald-400">---</span>
         </div>
@@ -108,8 +123,8 @@
     <!-- Result panels -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div class="bg-zinc-950/70 border border-zinc-800/80 rounded-xl p-4">
-        <div class="text-xs text-zinc-400 font-medium">کلمه تشخیص داده‌شده</div>
-        <div id="actionLabel" class="text-2xl font-black text-zinc-500 mt-2 truncate">---</div>
+        <div id="resultBoxTitle" class="text-xs text-zinc-400 font-medium">نتیجه تشخیص داده‌شده</div>
+        <div id="actionLabel" class="text-3xl font-black text-zinc-500 mt-2 truncate tracking-wide">---</div>
       </div>
 
       <div class="bg-zinc-950/70 border border-zinc-800/80 rounded-xl p-4">
@@ -126,7 +141,7 @@
     <!-- Raw response -->
     <div class="bg-zinc-950/70 border border-zinc-800/80 rounded-xl p-4">
       <div class="text-xs text-zinc-400 font-medium mb-2">آخرین پاسخ خام سرور</div>
-      <pre id="rawOutput" class="text-xs text-zinc-300 whitespace-pre-wrap break-words">---</pre>
+      <pre id="rawOutput" class="text-xs font-mono text-zinc-300 whitespace-pre-wrap break-words">---</pre>
     </div>
 
     <!-- Controls -->
@@ -172,7 +187,11 @@
     const fpsCount = document.getElementById("fpsCount");
     const modeBadge = document.getElementById("modeBadge");
     const handModeText = document.getElementById("handModeText");
+    const activeModeBadge = document.getElementById("activeModeBadge");
+    const activeModeText = document.getElementById("activeModeText");
+    const resultBoxTitle = document.getElementById("resultBoxTitle");
     const wsUrlInput = document.getElementById("wsUrlInput");
+    const modeSelect = document.getElementById("modeSelect");
     const tokenInput = document.getElementById("tokenInput");
     const rawOutput = document.getElementById("rawOutput");
     const healthResult = document.getElementById("healthResult");
@@ -195,7 +214,7 @@
 
     function resetUI() {
       actionLabel.innerText = "---";
-      actionLabel.className = "text-2xl font-black text-zinc-500 mt-2 truncate";
+      actionLabel.className = "text-3xl font-black text-zinc-500 mt-2 truncate tracking-wide";
       confText.innerText = "0%";
       confBar.style.width = "0%";
       confBar.className = "bg-zinc-600 h-2.5 rounded-full transition-all duration-150";
@@ -225,18 +244,25 @@
       try {
         const baseWsUrl = wsUrlInput.value.trim();
         const token = tokenInput.value.trim();
+        const selectedMode = modeSelect.value;
 
         if (!baseWsUrl) {
-          alert("آدرس WebSocket را وارد کن.");
+          alert("آدرس WebSocket را وارد کنید.");
           return;
         }
 
         if (!token) {
-          alert("JWT Token را وارد کن.");
+          alert("JWT Token را وارد کنید.");
           return;
         }
 
-        const wsUrl = `${baseWsUrl}?token=${encodeURIComponent(token)}`;
+        // افزودن خودکار پارامترهای token و mode به آدرس اتصال
+        const urlObj = new URL(baseWsUrl);
+        urlObj.searchParams.set("token", token);
+        urlObj.searchParams.set("mode", selectedMode);
+        const wsUrl = urlObj.toString();
+
+        resultBoxTitle.innerText = selectedMode === "spelling" ? "حرف الفبای تشخیص داده‌شده" : "کلمه تشخیص داده‌شده";
 
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
@@ -251,6 +277,8 @@
         video.classList.remove("hidden");
         placeholder.classList.add("hidden");
         modeBadge.classList.remove("hidden");
+        activeModeBadge.classList.remove("hidden");
+        activeModeText.innerText = selectedMode;
 
         ws = new WebSocket(wsUrl);
         ws.binaryType = "blob";
@@ -259,6 +287,7 @@
           setStatus(true, "متصل به سرور");
           startBtn.disabled = true;
           stopBtn.disabled = false;
+          modeSelect.disabled = true;
           startSendingFrames();
         };
 
@@ -276,23 +305,23 @@
           rawOutput.innerText = JSON.stringify(res, null, 2);
 
           if (res.hand_mode) {
-            if (res.hand_mode === "mirrored") {
-              handModeText.innerText = "mirrored";
-            } else if (res.hand_mode === "original") {
-              handModeText.innerText = "original";
-            } else {
-              handModeText.innerText = res.hand_mode;
-            }
+            handModeText.innerText = res.hand_mode;
           } else {
             handModeText.innerText = "---";
           }
 
           if (res.action === "idle") {
-            actionLabel.innerText = "در انتظار حرکت";
+            actionLabel.innerText = "در انتظار دست";
             actionLabel.className = "text-xl font-bold text-zinc-500 mt-2 truncate";
             confText.innerText = "0%";
             confBar.style.width = "0%";
             confBar.className = "bg-zinc-600 h-2.5 rounded-full transition-all duration-150";
+            return;
+          }
+
+          if (res.action === "buffering") {
+            actionLabel.innerText = `در حال ثبت فریم (${res.frames_collected}/${res.frames_required})`;
+            actionLabel.className = "text-base font-medium text-amber-400 mt-2 truncate";
             return;
           }
 
@@ -309,7 +338,7 @@
 
           if (res.action) {
             actionLabel.innerText = String(res.action).toUpperCase();
-            actionLabel.className = "text-2xl font-black text-emerald-400 mt-2 truncate";
+            actionLabel.className = "text-3xl font-black text-emerald-400 mt-2 truncate";
             confText.innerText = percent + "%";
             confBar.style.width = percent + "%";
             confBar.className = "bg-emerald-500 h-2.5 rounded-full transition-all duration-150";
@@ -383,8 +412,10 @@
       video.classList.add("hidden");
       placeholder.classList.remove("hidden");
       modeBadge.classList.add("hidden");
+      activeModeBadge.classList.add("hidden");
       startBtn.disabled = false;
       stopBtn.disabled = true;
+      modeSelect.disabled = false;
       setStatus(false, "قطع ارتباط");
       resetUI();
     }

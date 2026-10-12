@@ -13,7 +13,7 @@ from server.services.landmarks import TOTAL_FEATURES, mirror_keypoints
 logger = logging.getLogger(__name__)
 
 
-class SignPredictor:
+class TalkingPredictor:
     def __init__(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.actions = self._load_actions()

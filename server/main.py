@@ -9,7 +9,8 @@ from server.database import Base, engine
 from server.routes.auth import router as auth_router
 from server.routes.health import router as health_router
 from server.routes.inference import router as inference_router
-from server.services.predictor import SignPredictor
+from server.services.talking_predictor import TalkingPredictor
+from server.services.spelling_predictor import SpellingPredictor
 
 
 logging.basicConfig(
@@ -22,7 +23,8 @@ logging.basicConfig(
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
 
-    app.state.predictor = SignPredictor()
+    app.state.predictor = TalkingPredictor()
+    app.state.spelling_predictor = SpellingPredictor()
     
     yield
 

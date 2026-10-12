@@ -25,9 +25,21 @@ async def websocket_inference(websocket: WebSocket):
         return
 
     await websocket.accept()
-    logger.info("WebSocket connected: user=%s", user.username)
+    
+    # ➕ خواندن مود از URL (پیش‌فرض روی talking است)
+    mode = websocket.query_params.get("mode", "talking")
+    logger.info("WebSocket connected: user=%s, mode=%s", user.username, mode)
 
-    predictor = websocket.app.state.predictor
+    # 🔄 انتخاب پردیکتور بر اساس مود
+    if mode == "spelling":
+        predictor = getattr(websocket.app.state, "spelling_predictor", None)
+        if not predictor:
+            logger.error("Spelling predictor is not initialized in app.state")
+            await websocket.close(code=1011, reason="Spelling mode not available")
+            return
+    else:
+        predictor = getattr(websocket.app.state, "predictor", None)
+
     sequence_buffer = collections.deque(maxlen=settings.sequence_length)
 
     idle_response = {
@@ -79,6 +91,14 @@ async def websocket_inference(websocket: WebSocket):
                     continue
 
                 keypoints = extract_keypoints(results)
+
+                # ➕ اگر مود spelling باشد، نیازی به بافر ۳۰ فریمی نیست؛ مستقیم فریم را پردازش می‌کنیم
+                if mode == "spelling":
+                    response = await asyncio.to_thread(predictor.predict, keypoints)
+                    await websocket.send_json(response)
+                    continue
+
+                # منطق قبلی برای حالت talking (با بافر ۳۰ فریمی):
                 sequence_buffer.append(keypoints)
 
                 if len(sequence_buffer) < settings.sequence_length:
