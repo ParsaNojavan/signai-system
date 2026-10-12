@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useAuth } from "@/context/AuthContext"; // اضافه شد
 import { authApi } from "@/lib/api";
 import {
   KeyRound,
@@ -12,10 +13,10 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-// ۱. کامپوننت داخلی که از useSearchParams استفاده می‌کند
 function VerifyForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { login } = useAuth(); // متد ست کردن توکن در کوکی و استیت
 
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -35,13 +36,19 @@ function VerifyForm() {
     setLoading(true);
 
     try {
-      await authApi.verify({
+      const res = await authApi.verify({
         email: email.trim().toLowerCase(),
         code: code.trim(),
       });
-      router.push("/auth?verified=true");
+
+      if (res?.access_token) {
+        
+        await login(res.access_token);
+      } else {
+        router.push("/auth?verified=true");
+      }
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "خطایی در تأیید کد رخ داد");
     } finally {
       setLoading(false);
     }
@@ -99,7 +106,7 @@ function VerifyForm() {
         disabled={loading || code.length !== 6 || !email}
         className="inline-flex items-center justify-center rounded-md text-xs font-medium transition-colors bg-emerald-600 text-white shadow hover:bg-emerald-500 h-9 px-4 py-2 w-full gap-2 mt-2 disabled:opacity-50"
       >
-        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "تأیید و ورود"}
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "تأیید و ورود مستقیم"}
       </button>
 
       <button
@@ -114,7 +121,6 @@ function VerifyForm() {
   );
 }
 
-// ۲. کامپوننت اصلی که کل ساختار را نگه می‌دارد و Form را داخل Suspense می‌گذارد
 export default function VerifyPage() {
   return (
     <div
@@ -136,7 +142,6 @@ export default function VerifyPage() {
           </p>
         </div>
 
-        {/* قرار دادن کامپوننت کلاینتی داخل Suspense برای حل خطای بیلد/رندر Next.js */}
         <Suspense
           fallback={
             <div className="flex h-32 items-center justify-center">
