@@ -69,8 +69,9 @@ export const authApi = {
     }),
 
   verify: (payload: VerifyPayload) =>
-    apiFetch<{ message: string }>("/auth/verify", {
+    apiFetch<TokenResponse>("/auth/verify", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     }),
 
