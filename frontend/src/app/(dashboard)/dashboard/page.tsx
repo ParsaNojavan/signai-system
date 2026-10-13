@@ -672,7 +672,7 @@ export default function DashboardPage() {
               <span className="text-[10px] font-mono text-zinc-500">{history.length} آیتم</span>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-2 max-h-[380px] pr-1 select-none">
+            <div className="flex-1 overflow-y-auto overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden space-y-2 max-h-[380px] pr-1 select-none">
               {history.length === 0 ? (
                 <div className="h-full flex items-center justify-center text-xs text-zinc-600 py-16">
                   هنوز رکوردی ثبت نشده است
