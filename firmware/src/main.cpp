@@ -1,54 +1,44 @@
 #include <Arduino.h>
 #include <WiFi.h>
-#include <WebServer.h>
-#include "esp_camera.h"
-
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include "esp_camera.h"
+#include "esp_http_server.h"
 
-const char *WIFI_SSID = "";
-const char *WIFI_PASS = "";
+const char *ssid = "Parsa";
+const char *password = "parsanojavan1385";
 
-// ==========================================
-// 1.OLED
-// ==========================================
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
-#define OLED_SDA 8
-#define OLED_SCL 9
+#define OLED_SDA 1
+#define OLED_SCL 2
 #define OLED_ADDR 0x3C
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// ==========================================
-// 2. OV2640 (S3 + PSRAM)
-// ==========================================
 #define PWDN_GPIO_NUM -1
 #define RESET_GPIO_NUM -1
-#define XCLK_GPIO_NUM 10
+#define XCLK_GPIO_NUM 15
 #define SIOD_GPIO_NUM 4
-#define SIOC_GPIO_NUM 15
+#define SIOC_GPIO_NUM 5
 
-#define Y9_GPIO_NUM 48
-#define Y8_GPIO_NUM 11
-#define Y7_GPIO_NUM 12
-#define Y6_GPIO_NUM 14
-#define Y5_GPIO_NUM 16
-#define Y4_GPIO_NUM 17
-#define Y3_GPIO_NUM 18
-#define Y2_GPIO_NUM 21
+#define Y9_GPIO_NUM 16
+#define Y8_GPIO_NUM 17
+#define Y7_GPIO_NUM 18
+#define Y6_GPIO_NUM 12
+#define Y5_GPIO_NUM 10
+#define Y4_GPIO_NUM 8
+#define Y3_GPIO_NUM 9
+#define Y2_GPIO_NUM 11
 
 #define VSYNC_GPIO_NUM 6
 #define HREF_GPIO_NUM 7
 #define PCLK_GPIO_NUM 13
 
-WebServer server(80);
+httpd_handle_t httpd = NULL;
 
-// ==========================================
-// 3. Auth (HTML+CSS+JS)
-// ==========================================
 const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -577,48 +567,70 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
-// ==========================================
-// 4. Manage Http roots
-// ==========================================
-void handleRoot()
+static esp_err_t root_handler(httpd_req_t *req)
 {
-  server.sendHeader("Connection", "close");
-  server.send(200, "text/html", INDEX_HTML);
+  httpd_resp_set_type(req, "text/html; charset=utf-8");
+  return httpd_resp_send(req, INDEX_HTML, strlen(INDEX_HTML));
 }
 
-void handleFavicon()
+static esp_err_t favicon_handler(httpd_req_t *req)
 {
-  server.sendHeader("Connection", "close");
-  server.send(204);
+  httpd_resp_set_status(req, "204 No Content");
+  return httpd_resp_send(req, NULL, 0);
 }
 
-void handleCapture()
+static esp_err_t capture_handler(httpd_req_t *req)
 {
   camera_fb_t *fb = esp_camera_fb_get();
   if (!fb)
   {
-    server.send(503, "text/plain", "Camera busy");
-    return;
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
   }
 
-  size_t len = fb->len;
-  uint8_t *buf = fb->buf;
+  httpd_resp_set_type(req, "image/jpeg");
+  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+  httpd_resp_set_hdr(req, "Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
 
-  server.sendHeader("Access-Control-Allow-Origin", "*");
-  server.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-  server.sendHeader("Connection", "close");
-  server.setContentLength(len);
-  server.send(200, "image/jpeg", "");
-
-  WiFiClient client = server.client();
-  client.write(buf, len);
-
+  esp_err_t res = httpd_resp_send(req, (const char *)fb->buf, fb->len);
   esp_camera_fb_return(fb);
+  return res;
 }
 
-// ==========================================
-// 5. Camera startup
-// ==========================================
+void startHttpServer()
+{
+  httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+  config.server_port = 80;
+  config.max_uri_handlers = 8;
+  config.stack_size = 8192;
+
+  httpd_uri_t root_uri = {
+      .uri = "/",
+      .method = HTTP_GET,
+      .handler = root_handler,
+      .user_ctx = NULL};
+
+  httpd_uri_t fav_uri = {
+      .uri = "/favicon.ico",
+      .method = HTTP_GET,
+      .handler = favicon_handler,
+      .user_ctx = NULL};
+
+  httpd_uri_t cap_uri = {
+      .uri = "/capture",
+      .method = HTTP_GET,
+      .handler = capture_handler,
+      .user_ctx = NULL};
+
+  if (httpd_start(&httpd, &config) == ESP_OK)
+  {
+    httpd_register_uri_handler(httpd, &root_uri);
+    httpd_register_uri_handler(httpd, &fav_uri);
+    httpd_register_uri_handler(httpd, &cap_uri);
+    Serial.println("[HTTP] Server started successfully on port 80.");
+  }
+}
+
 bool initCamera()
 {
   camera_config_t config;
@@ -641,7 +653,7 @@ bool initCamera()
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
 
-  config.xclk_freq_hz = 8000000;
+  config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
   config.frame_size = FRAMESIZE_QVGA;
   config.jpeg_quality = 12;
@@ -651,7 +663,10 @@ bool initCamera()
 
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK)
+  {
+    Serial.printf("[ERROR] Camera init failed: 0x%x\n", err);
     return false;
+  }
 
   sensor_t *s = esp_camera_sensor_get();
   if (s != NULL)
@@ -659,23 +674,21 @@ bool initCamera()
     s->set_vflip(s, 1);
     s->set_hmirror(s, 0);
   }
-
   return true;
 }
 
-// ==========================================
-// 6. Loop & Setup
-// ==========================================
 void setup()
 {
   Serial.begin(115200);
   delay(1000);
+  Serial.println("\n[SYSTEM] Starting SignAI on ESP32-S3...");
 
   Wire.begin(OLED_SDA, OLED_SCL);
 
-  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR))
+  bool oledOk = display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
+  if (!oledOk)
   {
-    Serial.println(F("[ERROR] SSD1306 allocation failed"));
+    Serial.println("[WARN] SSD1306 OLED not found on 0x3C");
   }
   else
   {
@@ -689,54 +702,60 @@ void setup()
 
   if (!initCamera())
   {
-    Serial.println("[ERROR] Camera init failed!");
-    display.clearDisplay();
-    display.setCursor(0, 10);
-    display.println("Cam Init Failed!");
-    display.display();
+    if (oledOk)
+    {
+      display.clearDisplay();
+      display.setCursor(0, 10);
+      display.println("Cam Init Failed!");
+      display.display();
+    }
     return;
   }
   Serial.println("[OK] Camera Initialized.");
 
-  display.clearDisplay();
-  display.setCursor(0, 10);
-  display.println("Camera OK.");
-  display.println("Connecting WiFi...");
-  display.display();
+  if (oledOk)
+  {
+    display.clearDisplay();
+    display.setCursor(0, 10);
+    display.println("Camera OK.");
+    display.println("Connecting WiFi...");
+    display.display();
+  }
 
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  WiFi.begin(ssid, password);
+  WiFi.setSleep(false);
+
+  Serial.print("[WiFi] Connecting");
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(400);
     Serial.print(".");
   }
+  Serial.println("\n[WiFi] Connected!");
+  Serial.print("[HTTP] Open Dashboard at: http://");
+  Serial.println(WiFi.localIP());
 
-  Serial.printf("\n[WiFi] Connected!\n");
-  Serial.printf("[Dashboard URL] http://%s\n", WiFi.localIP().toString().c_str());
+  if (oledOk)
+  {
+    display.clearDisplay();
+    display.setTextSize(2);
+    display.setCursor(0, 5);
+    display.println("SignAI");
 
-  display.clearDisplay();
-  display.setTextSize(2);
-  display.setCursor(0, 5);
-  display.println("SignAI");
+    display.setTextSize(1);
+    display.setCursor(0, 32);
+    display.println("Status: Online");
+    display.setCursor(0, 48);
+    display.print("IP: ");
+    display.println(WiFi.localIP().toString());
+    display.display();
+  }
 
-  display.setTextSize(1);
-  display.setCursor(0, 35);
-  display.println("Connected!");
-  display.setCursor(0, 50);
-  display.print("IP: ");
-  display.println(WiFi.localIP().toString());
-  display.display();
-
-  server.on("/", handleRoot);
-  server.on("/favicon.ico", handleFavicon);
-  server.on("/capture", handleCapture);
-
-  server.begin();
-  Serial.println("[HTTP] Server ready.");
+  startHttpServer();
 }
 
 void loop()
 {
-  server.handleClient();
+  delay(2000);
 }
